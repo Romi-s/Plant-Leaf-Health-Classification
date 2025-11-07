@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def show_images(dataset, labels, batch_no, no_images_per_batch, num_cols=10):
+def show_images(dataset, labels, batch_no, no_images_per_batch, num_cols:int =10):
 
     start_index = batch_no * no_images_per_batch
     end_index = min((batch_no + 1) * no_images_per_batch, len(dataset))
@@ -23,7 +23,7 @@ def show_images(dataset, labels, batch_no, no_images_per_batch, num_cols=10):
 # Example usage:
 # show_images(dataset=images,labels =binary_labels, batch_no=0,no_images_per_batch=60)
 
-def plot_training_history(history, title_suffix=""):
+def plot_history(history, title_suffix=""):
     """
     Plots training & validation accuracy and loss from a Keras History object.
     Args:

@@ -35,11 +35,11 @@ def encode_labels(labels):
 def split_dataset(
     cleaned_images,
     cleaned_labels,
-    num_classes: int = 2,
     aug_params: dict = None,
     seed: int = 42
 ):
-    category_labels = to_categorical(cleaned_labels, num_classes)
+    # num_classes = 2, Healthy and Unhealthy
+    category_labels = to_categorical(cleaned_labels, 2)
     
     # Calculate class weights
     class_frequencies = np.sum(np.array(category_labels), axis=0)
