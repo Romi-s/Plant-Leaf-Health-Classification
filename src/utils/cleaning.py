@@ -2,7 +2,11 @@ from typing import List, Tuple, Sequence
 
 import cv2
 import numpy as np
+import pandas as pd
 from skimage.color import rgb2lab, deltaE_cie76
+
+from .viz import show_images
+from ..config import IMAGE_SHAPE
 
 
 def compute_histogram(image: np.ndarray) -> np.ndarray:
@@ -72,6 +76,7 @@ def find_unwanted_images_by_color_distance(
     cleaned_data: List[np.ndarray] = []
     unwanted_images: List[np.ndarray] = []
     unwanted_indices: List[int] = []
+    cleaned_indices: List[int] = []
 
     for idx, image in enumerate(data_array):
         similar = False
@@ -87,12 +92,13 @@ def find_unwanted_images_by_color_distance(
             unwanted_indices.append(idx)
         else:
             cleaned_data.append(image)
+            cleaned_indices.append(idx)
 
     # Convert lists to arrays (if not empty)
     cleaned_array = np.stack(cleaned_data, axis=0) if cleaned_data else np.empty((0,))
     unwanted_array = np.stack(unwanted_images, axis=0) if unwanted_images else np.empty((0,))
 
-    return cleaned_array, unwanted_array, unwanted_indices
+    return cleaned_array, unwanted_array, cleaned_indices, unwanted_indices
 
 
 def cleaned_dataset(
@@ -153,8 +159,40 @@ def cleaned_dataset(
             reference_unwanted_images = odd_images.copy()
 
     # 4) Remove images similar to reference unwanted images
-    cleaned_images, unwanted_images, unwanted_indices = find_unwanted_images_by_color_distance(
+    cleaned_images, unwanted_images, cleaned_indices, unwanted_indices = find_unwanted_images_by_color_distance(
         images, reference_unwanted_images, color_distance_threshold
     )
 
-    return cleaned_images, unwanted_images, unwanted_indices
+    return cleaned_images, unwanted_images, cleaned_indices, unwanted_indices
+
+
+def info_Table(
+        cleaned_images, 
+        unwanted_images, 
+        cleaned_indices, 
+        unwanted_indices
+    ) -> None:
+    print(" "*25,end=" ")
+    print("Unwanted Images ",end=' '*25)
+    show_images(dataset=unwanted_images,labels=unwanted_indices, batch_no=0,no_images_per_batch=10)
+
+
+    print(" "*25,end=" ")
+    print("Cleaned Images ",end=' '*25)
+    show_images(dataset=cleaned_images,labels =cleaned_indices, batch_no=0,no_images_per_batch=10)
+
+
+    no_images = cleaned_images.shape[0]
+    no_labels = cleaned_indices.shape[0]
+    _, counts = np.unique(cleaned_indices,return_counts=True) # count occurrence of each item
+    no_healthy_images = counts[0]
+    no_unhealthy_images = counts[1]
+
+    # pass variables to a dictionary to be used as dataframe for a better show
+    info_table_dict = {"no. images":no_images, "image width": IMAGE_SHAPE[0],"image length": IMAGE_SHAPE[1], "no. labels":no_labels,
+                    "no. healthy_images":no_healthy_images,"percentage%":no_healthy_images*100/no_labels,
+                    "no. unhealthy_images":no_unhealthy_images,"percentage %":no_unhealthy_images*100/no_labels }
+    print(" "*42,end=" ")
+    print("Table after Removing Outliers ",end=' '*42)
+    info_table = pd.DataFrame(info_table_dict, index =['value'])
+    print(info_table)
