@@ -3,7 +3,6 @@
 Binary classification of plant leaf images (healthy vs unhealthy) built with TensorFlow/Keras. This repo is a cleaned-up, modular split of an earlier notebook project, with a command-line trainer, model registry, and optional notebook/report for reference.
 
 ## Install
-
 ```bash
 pip install -r requirements.txt
 ```
@@ -12,27 +11,27 @@ pip install -r requirements.txt
 Put your dataset at `data/plant_dataset.npz` (default), or edit `DATA_PATH` in `src/config.py`. Images should be RGB of size 96×96; labels are mapped internally to {0,1}.
 
 ## Train (CLI)
+```bash
+# See options
+python -m cli --help
 
-# Single model
-python -m src.cli --mode single --name efficientnetb0 --plot-history --eval
+# Train one model
+python -m cli --mode single --name efficientnetb0 --eval --plot-history
 
-# Subset of models
-python -m src.cli --mode subset --names resnet50 inceptionv3 mobilenetv2 --eval
+# Train a subset
+python -m cli --mode subset --names resnet50 inceptionv3 mobilenetv2 --eval
 
-# All registered models (as defined in config)
-python -m src.cli --mode all
+# Train all registered models
+python -m cli --mode all
+```
+What happens: data is loaded/cleaned, splits+augmentation are built, the selected model(s) are trained with per‑model defaults from `config.py`.  
+Optional flags print metrics and save simple plots.
 
-## What it does
-- loads/inspects data, runs outlier cleaning, builds splits + augmentation
-- trains the chosen model(s) using per-model defaults from `src/config.py`
-- optional: plots history (`--plot-history`), prints metrics (`--eval`)
-
-Tip: The custom CNN can be hyper-parameter tuned. Toggle `MODELS["cnn"].tuner.enabled = True` in `src/config.py` to enable Keras-Tuner search before the final fit.
+> Tip: The custom CNN can be hyper-parameter tuned. Toggle `MODELS["cnn"].tuner.enabled = True` in `src/config.py` to enable Keras-Tuner search before the final fit.
 
 ## Models
-Transfer learning: resnet50, efficientnetb0, inceptionv3, mobilenetv2
-
-Custom: cnn (tuner-ready)
+- Transfer learning: `resnet50`, `efficientnetb0`, `inceptionv3`, `mobilenetv2`
+- Custom: `cnn` (tuner‑ready)
 
 ## Project layout
 - `src/cli.py` – command-line entry point (training modes & flags)
@@ -43,6 +42,9 @@ Custom: cnn (tuner-ready)
 - `src/config.py` – seeds, augmentation defaults, per-model training/tuning knobs
 - `report.pdf` – short report summarizing the original notebook findings
 
-## Optional notebook
-`notebook/compact_all.ipynb` (legacy, for exploration/reading). The recommended path is the CLI above.
+- `notebook/compact_all.ipynb` (legacy notebook). The recommended path is the CLI above.
+
+## Notes
+- You supply the generators/datasets; the CLI builds standard pipelines from `config.py`.
+- Override epochs/params via CLI or by editing each model’s block in `config.py`.
 
