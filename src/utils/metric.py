@@ -1,6 +1,13 @@
+from typing import Optional, Sequence, Dict, Any
 import numpy as np
-from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score, multilabel_confusion_matrix
-
+from sklearn.metrics import (
+    classification_report,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    multilabel_confusion_matrix,
+)
 
 def evaluate_model(model, validation_set, category_labels):
     """
@@ -43,8 +50,3 @@ def evaluate_model(model, validation_set, category_labels):
         'classification_report': report,
         'multilabel_confusion_matrix': mcm
     }
-
-# Example usage:
-# metrics = evaluate_model(MobileNetV2_model, validation_set, category_labels)
-# metrics = evaluate_model(CNN_model, validation_set, category_labels)
-# metrics = evaluate_model(InceptionV3_model, validation_set, category_labels)

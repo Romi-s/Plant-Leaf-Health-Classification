@@ -3,190 +3,122 @@ A small, extensible training API for all models.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional, Any, Tuple
+import inspect
 
 # project imports
-from .utils.viz import plot_history
+from .config import MODELS
 from .models.resnet50 import build_resnet50_model, get_resnet50_callbacks
 from .models.efficientnetb0 import build_efficientnetb0_model, get_efficientnetb0_callbacks
 from .models.inceptionv3 import build_inceptionv3_model, get_inceptionv3_callbacks
-from .models.cnn import build_cnn_tuned, get_cnn_callbacks
+from .models.cnn import build_cnn_model, get_cnn_callbacks
 from .models.mobilenetv2 import build_mobilenetv2_model, get_mobilenetv2_callbacks
 
 
-# --- Protocols -----------------------------------------------------------------
-class BuildFn(Protocol):
-    def __call__(self, **kwargs: Any):
-        """Return a **compiled** Keras model.
-        The implementation may accept arbitrary kwargs (e.g., hidden_units, hp for Keras Tuner).
-        """
+# --------------------------- Model registry definitions ---------------------------
 
-class CallbacksFn(Protocol):
-    def __call__(self) -> Optional[List[Any]]:
-        """Return a list of Keras callbacks (or None)."""
-
-
-# --- Registries ----------------------------------------------------------------
-MODEL_BUILDERS: Dict[str, BuildFn] = {}
-CALLBACK_FACTORIES: Dict[str, CallbacksFn] = {}
-
-
-def register_model(name: str, build_fn: BuildFn, callbacks_fn: Optional[CallbacksFn] = None) -> None:
-    """Register a model and its callbacks in the global registries."""
-    key = name.lower()
-    MODEL_BUILDERS[key] = build_fn
-    if callbacks_fn is not None:
-        CALLBACK_FACTORIES[key] = callbacks_fn
-
-
-# --- Per‑model defaults ---------------------------------------------------------
 @dataclass
-class ModelDefaults:
-    epochs: int = 50
-    builder_kwargs: Dict[str, Any] = field(default_factory=dict)
-
-MODEL_DEFAULTS: Dict[str, ModelDefaults] = {}
+class ModelSpec:
+    builder: Callable[..., Any]                      # returns a compiled tf.keras.Model
+    callbacks: Optional[Callable[[], list]] = None   # factory returning a list of callbacks
 
 
-def set_defaults(name: str, *, epochs: Optional[int] = None, **builder_kwargs: Any) -> None:
+_REGISTRY: Dict[str, ModelSpec] = {}
+_DEFAULTS: Dict[str, Dict[str, Any]] = {}  # e.g. {"cnn": {"epochs": 50, ...}}
+
+
+def register_model(name: str, builder: Callable[..., Any], callbacks: Optional[Callable[[], list]] = None) -> None:
+    """Register a model by name with its builder and optional callbacks factory."""
     key = name.lower()
-    cur = MODEL_DEFAULTS.get(key, ModelDefaults())
-    if epochs is not None:
-        cur.epochs = epochs
-    if builder_kwargs:
-        cur.builder_kwargs.update(builder_kwargs)
-    MODEL_DEFAULTS[key] = cur
+    _REGISTRY[key] = ModelSpec(builder=builder, callbacks=callbacks)
+    _DEFAULTS.setdefault(key, {})
 
 
-# --- Trainer -------------------------------------------------------------------
-class Trainer:
-    def __init__(self, *, model_name: str):
-        key = model_name.lower()
-        if key not in MODEL_BUILDERS:
-            raise KeyError(f"Model '{model_name}' is not registered. Use register_model(name, build_fn, callbacks_fn).")
-        self.model_name = key
+def set_defaults(name: str, **defaults: Any) -> None:
+    """Set per-model defaults such as epochs and builder kwargs (kept for completeness)."""
+    key = name.lower()
+    _DEFAULTS.setdefault(key, {})
+    _DEFAULTS[key].update(defaults)
 
-    def _resolve_defaults(self, epochs: Optional[int], builder_kwargs: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
-        d = MODEL_DEFAULTS.get(self.model_name, ModelDefaults())
-        resolved_epochs = epochs if epochs is not None else d.epochs
-        merged_kwargs = {**d.builder_kwargs, **(builder_kwargs or {})}
-        return resolved_epochs, merged_kwargs
 
-    def _get_callbacks(self) -> Optional[List[Any]]:
-        cb_fn = CALLBACK_FACTORIES.get(self.model_name)
-        return cb_fn() if cb_fn else None
-
-    def train(
-        self,
-        train_gen,
-        val_gen,
-        *,
-        epochs: Optional[int] = None,
-        verbose: int = 1,
-        plot: bool = True,
-        class_weight: Optional[dict] = None,
-        **builder_kwargs: Any,
-    ):
-        """Build the model, attach callbacks, train, and (optionally) plot history.
-
-        Example:
-            Trainer(model_name="efficientnetb0").train(train_gen, val_gen, epochs=60,
-                hidden_units=512, hidden_units_1=256)
-        """
-        epochs, builder_kwargs = self._resolve_defaults(epochs, builder_kwargs)
-        model = MODEL_BUILDERS[self.model_name](**builder_kwargs)
-        callbacks = self._get_callbacks()
-        history = model.fit(
-            train_gen,
-            epochs=epochs,
-            verbose=verbose,
-            callbacks=callbacks,
-            validation_data=val_gen,
-            class_weight=class_weight,
-        )
-        if plot:
-            plot_history(history)
-        return history
+def get_defaults(name: str) -> Dict[str, Any]:
+    return _DEFAULTS.get(name.lower(), {})
 
 
 # --- Project registration ------------------------------------------------------
 register_model("resnet50", build_resnet50_model, get_resnet50_callbacks)
 register_model("efficientnetb0", build_efficientnetb0_model, get_efficientnetb0_callbacks)
 register_model("inceptionv3", build_inceptionv3_model, get_inceptionv3_callbacks)
-register_model("cnn", build_cnn_tuned, get_cnn_callbacks)
+register_model("cnn", build_cnn_model, get_cnn_callbacks)
 register_model("mobilenetv2", build_mobilenetv2_model, get_mobilenetv2_callbacks)
 
-# Sensible defaults (override at call time as needed)
-set_defaults("resnet50", epochs=50, hidden_units=128)
-set_defaults("efficientnetb0", epochs=60, hidden_units=512, hidden_units_1=256)
-set_defaults("inceptionv3", epochs=60)
-set_defaults("cnn", epochs=50)  # pass hp=... when calling Trainer.train
-set_defaults("mobilenetv2", epochs=50)
+# Load per-model defaults from config (single source of truth)
+for _name, _cfg in MODELS.items():
+    set_defaults(_name, epochs=_cfg.training.epochs, **(_cfg.training.builder_kwargs or {}))
 
-# --- Convenience: train a single model by name --------------------------------
 
+# --- Internal helpers -------------------------------------------------------------------
+def _build_model_by_name(name: str, *, fit_context: Optional[Dict[str, Any]] = None) -> Tuple[Any, list]:
+    """
+    Create a compiled model and its callbacks by name.
+    We pass `fit_context` only if the builder actually accepts it (checked via signature).
+    """
+    key = name.lower()
+    spec = _REGISTRY.get(key)
+    if spec is None:
+        raise ValueError(f"Unknown model '{name}'. Registered: {list(_REGISTRY.keys())}")
+
+    builder = spec.builder
+    callbacks_factory = spec.callbacks
+
+    # Safer than catching TypeError: check if the builder has a 'fit_context' param.
+    builder_params = inspect.signature(builder).parameters
+    if "fit_context" in builder_params:
+        model = builder(fit_context=fit_context)
+    else:
+        model = builder()
+
+    callbacks = callbacks_factory() if callbacks_factory else []
+    return model, callbacks
+
+
+# --- Public training function -----------------------------------------------------------
 def train_model_by_name(
     name: str,
-    train_gen,
-    val_gen,
+    train_data: Any,
+    val_data: Any,
     *,
-    epochs: Optional[int] = None,
-    verbose: int = 1,
-    plot: bool = True,
-    class_weight: Optional[dict] = None,
-    **builder_kwargs: Any,
-):
-    """One‑liner replacement for all your previous `train_*` functions.
-
-    Example:
-        history = train_model_by_name(
-            "efficientnetb0", train_gen, val_gen, epochs=70, hidden_units=1024
-        )
+    fit_context: Optional[Dict[str, Any]] = None,
+) -> Tuple[Any, Any]:
     """
-    return Trainer(model_name=name).train(
-        train_gen,
-        val_gen,
+    Single API used by CLI and notebooks.
+    Builds the model from the registry and fits it with the provided datasets.
+    All training/tuning knobs (epochs, class weight policy, etc.) are sourced from config.MODELS.
+    """
+    # Build model + callbacks (tuning happens inside the CNN builder if enabled)
+    model, callbacks = _build_model_by_name(name, fit_context=fit_context)
+
+    # Resolve epochs & class-weight policy from config; fall back to _DEFAULTS if needed
+    key = name.lower()
+    cfg = MODELS.get(key)
+    if cfg is not None:
+        epochs = cfg.training.epochs
+        # Optional flag in TrainingConfig; default to True if absent
+        use_class_weight = getattr(cfg.training, "use_class_weight", True)
+    else:
+        defaults = get_defaults(key)
+        epochs = defaults.get("epochs", 50)
+        use_class_weight = True
+
+    # Class weights can be passed via fit_context (computed in CLI/data layer)
+    class_weight = fit_context.get("class_weight") if (use_class_weight and fit_context) else None
+
+    history = model.fit(
+        train_data,
         epochs=epochs,
-        verbose=verbose,
-        plot=plot,
+        validation_data=val_data,
         class_weight=class_weight,
-        **builder_kwargs,
+        callbacks=callbacks,
     )
-
-
-# --- Bonus: train many models in a loop ---------------------------------------
-
-def train_many(
-    names: Iterable[str],
-    train_gen,
-    val_gen,
-    *,
-    per_model_overrides: Optional[Mapping[str, Dict[str, Any]]] = None,
-    verbose: int = 1,
-    plot_each: bool = False,
-) -> Dict[str, Any]:
-    """Train multiple registered models and return a dict name ➜ history.
-
-    `per_model_overrides` allows per‑model kwargs/epochs, e.g.:
-        per_model_overrides={
-            "resnet50": {"epochs": 40, "hidden_units": 256},
-            "cnn": {"epochs": 25, "hp": hp},
-        }
-    """
-    results: Dict[str, Any] = {}
-    for name in names:
-        overrides = (per_model_overrides or {}).get(name.lower(), {}).copy()
-        epochs = overrides.pop("epochs", None)
-        class_weight = overrides.pop("class_weight", None)
-        history = Trainer(model_name=name).train(
-            train_gen,
-            val_gen,
-            epochs=epochs,
-            verbose=verbose,
-            plot=plot_each,
-            class_weight=class_weight,
-            **overrides,
-        )
-        results[name.lower()] = history
-    return results
+    return model, history

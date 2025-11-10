@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from typing import Optional
 
 def show_images(dataset, labels, batch_no, no_images_per_batch, num_cols:int =10):
 
@@ -20,40 +21,51 @@ def show_images(dataset, labels, batch_no, no_images_per_batch, num_cols:int =10
 
     plt.show()
 
-# Example usage:
-# show_images(dataset=images,labels =binary_labels, batch_no=0,no_images_per_batch=60)
 
-def plot_history(history, title_suffix=""):
+def plot_history(history, title: Optional[str] = None):
     """
-    Plots training & validation accuracy and loss from a Keras History object.
-    Args:
-        history: Keras History object from model.fit()
-        title_suffix: Optional string to append to plot titles
+    Plot training & validation accuracy/loss from a Keras History object.
+    Compatible with: plot_history(history, title="...").
     """
-    acc = history.history.get('accuracy')
-    val_acc = history.history.get('val_accuracy')
-    loss = history.history.get('loss')
-    val_loss = history.history.get('val_loss')
+    if history is None or getattr(history, "history", None) is None:
+        print("plot_history: no history to plot.")
+        return
 
-    epochs = range(1, len(acc) + 1)
+    hist = history.history
+    acc = hist.get("accuracy")
+    val_acc = hist.get("val_accuracy")
+    loss = hist.get("loss")
+    val_loss = hist.get("val_loss")
+
+    if not acc and not loss:
+        print("plot_history: missing 'accuracy'/'loss' keys.")
+        return
 
     plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, acc, 'b-', label='Training Accuracy')
-    if val_acc:
-        plt.plot(epochs, val_acc, 'r-', label='Validation Accuracy')
-    plt.title(f'Training and Validation Accuracy{title_suffix}')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
 
+    # Accuracy
+    plt.subplot(1, 2, 1)
+    if acc:
+        plt.plot(range(1, len(acc) + 1), acc, label="Train")
+    if val_acc:
+        plt.plot(range(1, len(val_acc) + 1), val_acc, label="Val")
+    plt.title(f"Accuracy{(' — ' + title) if title else ''}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    if acc or val_acc:
+        plt.legend()
+
+    # Loss
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, loss, 'b-', label='Training Loss')
+    if loss:
+        plt.plot(range(1, len(loss) + 1), loss, label="Train")
     if val_loss:
-        plt.plot(epochs, val_loss, 'r-', label='Validation Loss')
-    plt.title(f'Training and Validation Loss{title_suffix}')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
+        plt.plot(range(1, len(val_loss) + 1), val_loss, label="Val")
+    plt.title(f"Loss{(' — ' + title) if title else ''}")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    if loss or val_loss:
+        plt.legend()
+
     plt.tight_layout()
     plt.show()

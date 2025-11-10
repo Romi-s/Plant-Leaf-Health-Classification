@@ -76,5 +76,5 @@ def split_dataset(
         seed=seed,
         subset="validation"
     )
-    
-    return aug_train_set, validation_set, class_weights
+
+    return aug_train_set, validation_set, class_weights, category_labels
