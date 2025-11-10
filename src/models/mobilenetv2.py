@@ -23,14 +23,13 @@ def build_mobilenetv2_model(input_shape=(96, 96, 3), seed=42):
 	# Freeze base model
 	model.get_layer('mobilenetv2_1.00_96').trainable = False
 	model.compile(loss=tfk.losses.CategoricalCrossentropy(), optimizer=tfk.optimizers.Adam(), metrics=['accuracy'])
+
+	# Display model summary
+	model.summary()
+
 	return model
 
 def get_mobilenetv2_callbacks():
 	lr_reduction = ReduceLROnPlateau(monitor='val_accuracy', patience=10, verbose=1, factor=0.2, min_lr=0.000001)
 	checkpoint = ModelCheckpoint('MobileNetV2_model.hdf5', save_best_only=True, monitor='accuracy', mode='max')
 	return [lr_reduction, checkpoint]
-
-# Example usage:
-# model = build_mobilenetv2_model()
-# callbacks = get_mobilenetv2_callbacks()
-# history = model.fit(aug_train_set, steps_per_epoch=len(aug_train_set), epochs=50, verbose=1, callbacks=callbacks, validation_data=validation_set)

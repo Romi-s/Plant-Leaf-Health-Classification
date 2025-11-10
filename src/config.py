@@ -9,6 +9,8 @@ import tensorflow as tf
 SEED = 42
 BATCH_SIZE = 64
 IMAGE_SHAPE = (96, 96, 3)
+IMG_SIZE = (IMAGE_SHAPE[0], IMAGE_SHAPE[1])  # (96, 96)
+N_CHANNELS = IMAGE_SHAPE[2]
 DATA_PATH = "data/plant_dataset.npz"
 
 def set_global_seed(seed: int = SEED):

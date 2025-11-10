@@ -21,6 +21,9 @@ def build_inceptionv3_model(input_shape=(96, 96, 3), seed=42):
 	for i, layer in enumerate(model.get_layer('inception_v3').layers[:38]):
 		layer.trainable = False
 	model.compile(loss='categorical_crossentropy', optimizer=Adam(), metrics=['accuracy'])
+
+	# Display model summary
+	model.summary()
 	return model
 
 def get_inceptionv3_callbacks():
